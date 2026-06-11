@@ -27,9 +27,3 @@ module "compute" {
   subnet_self_link = module.network.subnet_self_link
   vpc_id           = module.network.vpc_id
 }
-
-module "wif" {
-  source      = "../modules/wif-pool"
-  project_id  = var.project_id
-  github_repo = var.github_repo
-}

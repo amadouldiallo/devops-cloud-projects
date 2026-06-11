@@ -1,8 +1,8 @@
-# Pool d'identité fédérée pour GitHub Actions — partagé par tous les projets
-# de ce repo (un seul pool/provider par dépôt GitHub).
+# Pool d'identité fédérée pour GitHub Actions — un pool par projet/état
+# Terraform, pour qu'un projet soit détruit/recréé sans impact sur les autres.
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project_id
-  workload_identity_pool_id = "github-pool"
+  workload_identity_pool_id = var.pool_id
   display_name              = "GitHub Actions"
 }
 

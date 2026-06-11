@@ -15,5 +15,5 @@ output "deployer_service_account_email" {
 
 output "workload_identity_provider" {
   description = "Valeur du secret GitHub WIF_PROVIDER"
-  value       = data.terraform_remote_state.foundation.outputs.workload_identity_provider_name
+  value       = module.wif.provider_name
 }

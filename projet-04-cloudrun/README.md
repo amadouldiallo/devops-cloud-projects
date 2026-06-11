@@ -7,7 +7,7 @@ Actions sans clé statique.
 > 🏗️ L'infrastructure GCP (Artifact Registry, service Cloud Run, identité de
 > déploiement) est provisionnée par Terraform dans
 > [`terraform/`](terraform/) — un **state indépendant** de la fondation, voir
-> [`../landing-zone/README.md` § 10](../landing-zone/README.md#10-fondation-vs-projets-le-pool-wif-partagé-et-le-state-de-projet-04).
+> [`../landing-zone/README.md` § 10](../landing-zone/README.md#10-fondation-vs-projets-un-state-et-un-pool-wif-indépendant-par-projet).
 > Ce document couvre principalement le **code applicatif**.
 
 ---
@@ -22,7 +22,7 @@ projet-04-cloudrun/
 ├── Dockerfile          # build multi-stage, utilisateur non-root
 └── terraform/          # infra applicative — state Terraform indépendant
     ├── backend.tf      # state : gs://devops-498817-tfstate/projet-04-cloudrun/state
-    ├── main.tf         # module cloudrun-service + lecture du pool WIF (fondation)
+    ├── main.tf         # module wif (pool dédié) + module cloudrun-service
     └── outputs.tf      # cloud_run_url, secrets WIF pour le pipeline CI/CD
 ```
 
@@ -81,10 +81,10 @@ curl http://localhost:8080/health
 ## Provisionner l'infrastructure (Terraform)
 
 Le dossier [`terraform/`](terraform/) gère **uniquement** les ressources de
-ce projet (Artifact Registry, Cloud Run, SA `cloudrun-deployer`) — un state
-indépendant de la fondation (`landing-zone/`). Il lit le pool WIF partagé via
-`terraform_remote_state` (lecture seule, aucune écriture sur le state de la
-fondation).
+ce projet (Artifact Registry, Cloud Run, SA `cloudrun-deployer`, pool WIF
+dédié) — un state indépendant de la fondation (`landing-zone/`) et des autres
+projets : aucune lecture cross-state, ce dossier peut être détruit et recréé
+sans aucun impact ailleurs.
 
 ```bash
 cd terraform
@@ -133,7 +133,7 @@ clé JSON stockée dans GitHub.
 Prérequis (une seule fois, après `terraform apply` dans
 [`terraform/`](terraform/), voir section suivante) : secrets de repo
 `WIF_PROVIDER` et `WIF_SERVICE_ACCOUNT` — voir
-[`../landing-zone/README.md` § 10](../landing-zone/README.md#10-fondation-vs-projets-le-pool-wif-partagé-et-le-state-de-projet-04).
+[`../landing-zone/README.md` § 10](../landing-zone/README.md#10-fondation-vs-projets-un-state-et-un-pool-wif-indépendant-par-projet).
 
 ---
 

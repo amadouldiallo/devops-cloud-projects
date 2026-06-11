@@ -1,10 +1,10 @@
-# State de la fondation (landing-zone) — fournit le pool WIF partagé
-data "terraform_remote_state" "foundation" {
-  backend = "gcs"
-  config = {
-    bucket = "devops-498817-tfstate"
-    prefix = "landing-zone/state"
-  }
+# Pool WIF dédié à ce projet — détruire/recréer ce state n'affecte aucun
+# autre projet (et inversement).
+module "wif" {
+  source      = "../../modules/wif-pool"
+  project_id  = var.project_id
+  github_repo = var.github_repo
+  pool_id     = "github-pool-p04"
 }
 
 module "cloudrun_service" {
@@ -13,5 +13,5 @@ module "cloudrun_service" {
   project_id                  = var.project_id
   region                      = var.region
   github_repo                 = var.github_repo
-  workload_identity_pool_name = data.terraform_remote_state.foundation.outputs.workload_identity_pool_name
+  workload_identity_pool_name = module.wif.pool_name
 }

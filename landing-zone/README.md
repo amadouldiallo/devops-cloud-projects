@@ -52,16 +52,16 @@ devops-cloud-projects/
 │   ├── iam/                # rôles et permissions (J2)
 │   ├── budget/             # alertes de facturation as code (J2)
 │   ├── compute/            # VM de lab à la demande (§8)
-│   ├── wif-pool/           # pool/provider WIF GitHub, partagé par tous les projets (§10)
+│   ├── wif-pool/           # pool/provider WIF GitHub — un pool par projet (§10)
 │   └── cloudrun-service/   # Cloud Run + Artifact Registry + SA déployeur (par projet, §10)
 ├── landing-zone/           # FONDATION — un seul state, ressources partagées
 │   ├── backend.tf          # configuration du remote state
 │   ├── provider.tf         # quel cloud, quel projet, quelle région
 │   ├── variables.tf        # variables globales du projet
-│   └── main.tf             # assemble network, iam, budget, compute, wif
+│   └── main.tf             # assemble network, iam, budget, compute
 └── projet-04-cloudrun/
     └── terraform/          # state INDÉPENDANT du Projet 04 (§10)
-        └── main.tf         # assemble cloudrun-service + lit les outputs de la fondation
+        └── main.tf         # assemble wif (pool dédié) + cloudrun-service
 ```
 
 > 📌 **Pourquoi cette découpe et pas un seul gros fichier ?**
@@ -73,10 +73,10 @@ devops-cloud-projects/
 >   (`terraform plan -target=module.network`) pendant qu'on le développe
 > - **Travail en équipe** : deux personnes peuvent travailler sur deux modules
 >   différents sans se gêner
-> - **State séparé par projet** : `landing-zone/` (fondation) et
+> - **State (et pool WIF) séparés par projet** : `landing-zone/` (fondation) et
 >   `projet-04-cloudrun/terraform/` (application) ont chacun leur **state
->   Terraform indépendant** — un `apply` sur l'un ne touche jamais les
->   ressources de l'autre. Détails en § 10.
+>   Terraform indépendant** et leur propre pool WIF — un `apply`/`destroy` sur
+>   l'un ne touche jamais les ressources de l'autre. Détails en § 10.
 
 ---
 
@@ -513,43 +513,36 @@ Aucun finding HIGH ou CRITICAL.
 
 ---
 
-## 10. Fondation vs. projets — le pool WIF partagé et le state de Projet 04
+## 10. Fondation vs. projets — un state (et un pool WIF) indépendant par projet
 
 ### 🧠 Concept : séparer l'infra "permanente" de l'infra "applicative"
 
 Les modules de cette fondation (`network`, `iam`, `budget`, `compute`) posent
-les bases du projet GCP — elles changent rarement et sont **partagées par
-tous les projets**. À l'inverse, l'infra **applicative** d'un projet (par
-exemple le backend FastAPI du [Projet 04](../projet-04-cloudrun/README.md) :
-registre d'images, service Cloud Run, SA de déploiement) évolue à son propre
-rythme et vit dans **son propre dossier Terraform avec son propre state**
+les bases du projet GCP — elles changent rarement. À l'inverse, l'infra
+**applicative** d'un projet (par exemple le backend FastAPI du
+[Projet 04](../projet-04-cloudrun/README.md) : registre d'images, service
+Cloud Run, SA de déploiement, pool WIF) évolue à son propre rythme et vit dans
+**son propre dossier Terraform avec son propre state**
 (`projet-04-cloudrun/terraform/`, state `gs://devops-498817-tfstate/projet-04-cloudrun/state`).
 
 > 🔑 **Analogie :** `network`/`iam`/`compute`/`budget` sont les fondations et
 > les murs de l'immeuble (un seul "chantier", un seul state). Le Projet 04 est
-> **un local commercial** avec son propre bail (son propre state) — le
-> rénover ne rouvre pas le chantier de l'immeuble entier, et inversement.
+> **un local commercial** avec son propre bail, ses propres clés (son propre
+> state, son propre pool WIF) — le rénover ou le résilier ne rouvre pas le
+> chantier de l'immeuble entier, et inversement.
 
-> ⚠️ **Pourquoi cette séparation ?** Au départ, Cloud Run et le pool WIF
-> vivaient dans `landing-zone` (module `cloudrun`). Un `apply` ciblé sur ce
-> module a fini par **réappliquer tout le root module** et recréer le Cloud
-> NAT qui avait été détruit la veille. Donner à chaque projet son propre state
-> évite qu'un `apply` applicatif touche aux ressources réseau partagées.
-
-### La seule chose partagée : le pool WIF GitHub
-
-Le **pool/provider Workload Identity Federation** (un par dépôt GitHub) reste
-dans la fondation — `module "wif"` (source [`../modules/wif-pool`](../modules/wif-pool/)) —
-et est exposé via deux outputs :
-
-```hcl
-output "workload_identity_pool_name"     # main.tf:31, outputs.tf
-output "workload_identity_provider_name"
-```
-
-Chaque projet lit ces valeurs via `terraform_remote_state` (data source GCS,
-lecture seule) plutôt que de redéfinir son propre pool — un seul pool WIF
-pour tout le repo, peu importe le nombre de projets.
+> ⚠️ **Pourquoi cette séparation ?** Deux incidents successifs l'ont motivée.
+> D'abord, Cloud Run et le pool WIF vivaient dans `landing-zone` (module
+> `cloudrun`) : un `apply` ciblé sur ce module a fini par **réappliquer tout
+> le root module** et recréer le Cloud NAT détruit la veille. Une fois Projet
+> 04 sorti dans son propre state, il restait une dépendance résiduelle : ce
+> state lisait le pool WIF de `landing-zone` via `terraform_remote_state`. Un
+> `terraform destroy` sur `landing-zone` a cassé le `plan`/`destroy` de Projet
+> 04 (`outputs is object with no attributes`). **Chaque projet a maintenant
+> son propre pool WIF** (`module "wif"`, source
+> [`../../modules/wif-pool`](../modules/wif-pool/), `pool_id` unique par
+> projet) — plus aucune lecture cross-state, un projet peut être détruit et
+> recréé sans toucher aux autres ni à la fondation.
 
 ### Schéma — du `git push` au service en ligne (Projet 04)
 
@@ -557,7 +550,7 @@ pour tout le repo, peu importe le nombre de projets.
 GitHub Actions (push sur main)
         │  jeton OIDC (court terme, signé par GitHub)
         ▼
-Workload Identity Federation (modules/wif-pool, state landing-zone)
+Workload Identity Federation (modules/wif-pool, pool_id="github-pool-p04", state projet-04-cloudrun)
         │  credentials GCP temporaires (pas de clé JSON)
         ▼
 cloudrun-deployer@...iam.gserviceaccount.com (modules/cloudrun-service, state projet-04-cloudrun)

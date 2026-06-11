@@ -30,6 +30,8 @@ resource "google_cloud_run_v2_service" "backend" {
   name     = var.service_name
   location = var.region
 
+  deletion_protection = false
+
   template {
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello"

@@ -25,8 +25,3 @@ variable "admin_email" {
   description = "Adresse email du compte Google humain autorisé à se connecter en SSH à la VM de lab (IAP + OS Login)"
   type        = string
 }
-
-variable "github_repo" {
-  description = "Repo GitHub (format owner/repo) autorisé à s'authentifier via Workload Identity Federation pour le déploiement Cloud Run (Projet 04)"
-  type        = string
-}

@@ -15,7 +15,7 @@ variable "github_repo" {
 }
 
 variable "workload_identity_pool_name" {
-  description = "Nom complet du pool WIF partagé (output workload_identity_pool_name de la fondation landing-zone)"
+  description = "Nom complet du pool WIF de ce projet (output pool_name du module wif-pool)"
   type        = string
 }
 

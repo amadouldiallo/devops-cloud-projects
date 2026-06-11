@@ -11,7 +11,7 @@ ont besoin via un chemin relatif.
 | [`iam/`](iam/) | Bindings IAM (principe du moindre privilège) | `landing-zone` |
 | [`budget/`](budget/) | Alerte de facturation (FinOps as Code) | `landing-zone` |
 | [`compute/`](compute/) | VM de lab à la demande (lab-vm) | `landing-zone` |
-| [`wif-pool/`](wif-pool/) | Pool/provider Workload Identity Federation GitHub — un seul par dépôt | `landing-zone` |
+| [`wif-pool/`](wif-pool/) | Pool/provider Workload Identity Federation GitHub — un par projet (`pool_id` distinct) | `projet-04-cloudrun/terraform` |
 | [`cloudrun-service/`](cloudrun-service/) | Artifact Registry + Cloud Run + SA déployeur, pour une app donnée | `projet-04-cloudrun/terraform` |
 
 ## Convention d'usage
@@ -30,13 +30,14 @@ le changement voulu.
 
 En sortant les modules de `landing-zone/` :
 
-- chaque **projet** a son propre dossier Terraform + son propre state, et ne
-  référence que les modules dont il a besoin ;
+- chaque **projet** a son propre dossier Terraform + son propre state + son
+  propre pool WIF, et ne référence que les modules dont il a besoin ;
 - la **fondation** (`landing-zone/`) garde son state séparé pour les
-  ressources partagées (réseau, IAM, budget, lab-vm, pool WIF) ;
+  ressources partagées (réseau, IAM, budget, lab-vm) ;
 - un module modifié ici (ex. `cloudrun-service/`) n'affecte que les states qui
-  l'utilisent — pas les autres projets.
+  l'utilisent — pas les autres projets ; détruire le state d'un projet
+  n'affecte ni la fondation ni les autres projets.
 
 Voir [`../landing-zone/README.md` § 2](../landing-zone/README.md#2-pourquoi-découper-en-modules-network-iam-budget-)
-et [§ 10](../landing-zone/README.md#10-fondation-vs-projets-le-pool-wif-partagé-et-le-state-de-projet-04)
+et [§ 10](../landing-zone/README.md#10-fondation-vs-projets-un-state-et-un-pool-wif-indépendant-par-projet)
 pour le détail de cette architecture.
