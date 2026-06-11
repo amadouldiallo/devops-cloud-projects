@@ -1,11 +1,11 @@
 module "network" {
-  source     = "./modules/network"
+  source     = "../modules/network"
   project_id = var.project_id
   region     = var.region
 }
 
 module "iam" {
-  source     = "./modules/iam"
+  source     = "../modules/iam"
   project_id = var.project_id
 
   iam_bindings = {
@@ -15,21 +15,21 @@ module "iam" {
 }
 
 module "budget" {
-  source             = "./modules/budget"
+  source             = "../modules/budget"
   project_id         = var.project_id
   billing_account_id = var.billing_account_id
 }
 
 module "compute" {
-  source           = "./modules/compute"
+  source           = "../modules/compute"
   project_id       = var.project_id
   zone             = var.zone
   subnet_self_link = module.network.subnet_self_link
   vpc_id           = module.network.vpc_id
 }
 
-module "cloudrun" {
-  source      = "./modules/cloudrun"
+module "wif" {
+  source      = "../modules/wif-pool"
   project_id  = var.project_id
   github_repo = var.github_repo
 }

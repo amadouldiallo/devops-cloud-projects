@@ -46,15 +46,22 @@ indépendamment, avec ses propres `variables.tf` (entrées) et `outputs.tf`
 (sorties) — un peu comme une fonction dans un langage de programmation.
 
 ```
-landing-zone/
-├── backend.tf       # configuration du remote state
-├── provider.tf      # quel cloud, quel projet, quelle région
-├── variables.tf     # variables globales du projet
-├── main.tf          # assemble les modules
-└── modules/
-    ├── network/     # VPC, sous-réseaux, routage, NAT
-    ├── iam/         # rôles et permissions (J2)
-    └── budget/      # alertes de facturation as code (J2)
+devops-cloud-projects/
+├── modules/                # modules partagés — externes à tous les projets
+│   ├── network/            # VPC, sous-réseaux, routage, NAT
+│   ├── iam/                # rôles et permissions (J2)
+│   ├── budget/             # alertes de facturation as code (J2)
+│   ├── compute/            # VM de lab à la demande (§8)
+│   ├── wif-pool/           # pool/provider WIF GitHub, partagé par tous les projets (§10)
+│   └── cloudrun-service/   # Cloud Run + Artifact Registry + SA déployeur (par projet, §10)
+├── landing-zone/           # FONDATION — un seul state, ressources partagées
+│   ├── backend.tf          # configuration du remote state
+│   ├── provider.tf         # quel cloud, quel projet, quelle région
+│   ├── variables.tf        # variables globales du projet
+│   └── main.tf             # assemble network, iam, budget, compute, wif
+└── projet-04-cloudrun/
+    └── terraform/          # state INDÉPENDANT du Projet 04 (§10)
+        └── main.tf         # assemble cloudrun-service + lit les outputs de la fondation
 ```
 
 > 📌 **Pourquoi cette découpe et pas un seul gros fichier ?**
@@ -66,6 +73,10 @@ landing-zone/
 >   (`terraform plan -target=module.network`) pendant qu'on le développe
 > - **Travail en équipe** : deux personnes peuvent travailler sur deux modules
 >   différents sans se gêner
+> - **State séparé par projet** : `landing-zone/` (fondation) et
+>   `projet-04-cloudrun/terraform/` (application) ont chacun leur **state
+>   Terraform indépendant** — un `apply` sur l'un ne touche jamais les
+>   ressources de l'autre. Détails en § 10.
 
 ---
 
@@ -109,7 +120,7 @@ landing-zone/
 > les habitants (VM) peuvent envoyer du courrier (requêtes sortantes) sans que
 > personne à l'extérieur ne connaisse leur adresse personnelle (IP publique).
 
-Fichier [`modules/network/main.tf`](modules/network/main.tf), 4 ressources :
+Fichier [`modules/network/main.tf`](../modules/network/main.tf), 4 ressources :
 
 ### a. Le VPC (`google_compute_network`)
 ```hcl
@@ -209,7 +220,7 @@ On s'arrête volontairement à `plan` : **aucune ressource n'est créée**, donc
 
 ## 6. Le module `iam` — principe du moindre privilège
 
-Fichier [`modules/iam/main.tf`](modules/iam/main.tf).
+Fichier [`modules/iam/main.tf`](../modules/iam/main.tf).
 
 ### Pourquoi un compte de service dédié ?
 
@@ -262,7 +273,7 @@ On utilise des rôles granulaires : `compute.networkAdmin` pour le réseau,
 
 ## 7. Le module `budget` — FinOps as Code
 
-Fichier [`modules/budget/main.tf`](modules/budget/main.tf).
+Fichier [`modules/budget/main.tf`](../modules/budget/main.tf).
 
 ### Pourquoi coder le budget plutôt que le cliquer ?
 
@@ -451,7 +462,7 @@ gcloud compute instances stop lab-vm --zone=europe-west1-b
 ### Et ensuite ?
 
 Au démarrage, la VM exécute automatiquement
-[`modules/compute/files/setup.sh`](modules/compute/files/setup.sh) : il
+[`modules/compute/files/setup.sh`](../modules/compute/files/setup.sh) : il
 installe `git`, Docker (durci : `no-new-privileges`, rotation des logs) et un
 cluster `k3s` (configuration par défaut), puis active `ufw` (SSH via IAP
 uniquement) et `unattended-upgrades`.
@@ -487,7 +498,7 @@ Google (Cloud Storage, Secret Manager, Artifact Registry...) — elles n'ont
 aucun chemin réseau vers ces services. Avec `private_ip_google_access = true`,
 GCP route ce trafic via son réseau interne, sans passer par Internet.
 
-**Correction appliquée** dans [`modules/network/main.tf`](modules/network/main.tf) :
+**Correction appliquée** dans [`modules/network/main.tf`](../modules/network/main.tf) :
 ```hcl
 private_ip_google_access = true
 ```
@@ -502,48 +513,60 @@ Aucun finding HIGH ou CRITICAL.
 
 ---
 
-## 10. Le module `cloudrun` — CI/CD Cloud Run sans clé statique (Projet 04)
+## 10. Fondation vs. projets — le pool WIF partagé et le state de Projet 04
 
 ### 🧠 Concept : séparer l'infra "permanente" de l'infra "applicative"
 
-Les modules précédents (`network`, `iam`, `budget`, `compute`) posent les
-fondations du projet — elles changent rarement. Le module `cloudrun` est
-différent : il provisionne ce dont **une application** (le backend FastAPI du
-[Projet 04](../projet-04-cloudrun/README.md)) a besoin pour exister et se
-déployer en continu — un registre d'images, un service serverless, et une
-identité dédiée pour le pipeline CI/CD.
+Les modules de cette fondation (`network`, `iam`, `budget`, `compute`) posent
+les bases du projet GCP — elles changent rarement et sont **partagées par
+tous les projets**. À l'inverse, l'infra **applicative** d'un projet (par
+exemple le backend FastAPI du [Projet 04](../projet-04-cloudrun/README.md) :
+registre d'images, service Cloud Run, SA de déploiement) évolue à son propre
+rythme et vit dans **son propre dossier Terraform avec son propre state**
+(`projet-04-cloudrun/terraform/`, state `gs://devops-498817-tfstate/projet-04-cloudrun/state`).
 
-> 🔑 **Analogie :** si `network`/`iam`/`compute` sont les fondations et les
-> murs d'un immeuble, `cloudrun` est **un local commercial** prêt à accueillir
-> un commerçant (l'app) — avec sa propre clé d'accès (le SA `cloudrun-deployer`)
-> qui n'ouvre QUE ce local, pas tout l'immeuble.
+> 🔑 **Analogie :** `network`/`iam`/`compute`/`budget` sont les fondations et
+> les murs de l'immeuble (un seul "chantier", un seul state). Le Projet 04 est
+> **un local commercial** avec son propre bail (son propre state) — le
+> rénover ne rouvre pas le chantier de l'immeuble entier, et inversement.
 
-### Schéma — du `git push` au service en ligne
+> ⚠️ **Pourquoi cette séparation ?** Au départ, Cloud Run et le pool WIF
+> vivaient dans `landing-zone` (module `cloudrun`). Un `apply` ciblé sur ce
+> module a fini par **réappliquer tout le root module** et recréer le Cloud
+> NAT qui avait été détruit la veille. Donner à chaque projet son propre state
+> évite qu'un `apply` applicatif touche aux ressources réseau partagées.
+
+### La seule chose partagée : le pool WIF GitHub
+
+Le **pool/provider Workload Identity Federation** (un par dépôt GitHub) reste
+dans la fondation — `module "wif"` (source [`../modules/wif-pool`](../modules/wif-pool/)) —
+et est exposé via deux outputs :
+
+```hcl
+output "workload_identity_pool_name"     # main.tf:31, outputs.tf
+output "workload_identity_provider_name"
+```
+
+Chaque projet lit ces valeurs via `terraform_remote_state` (data source GCS,
+lecture seule) plutôt que de redéfinir son propre pool — un seul pool WIF
+pour tout le repo, peu importe le nombre de projets.
+
+### Schéma — du `git push` au service en ligne (Projet 04)
 
 ```
 GitHub Actions (push sur main)
         │  jeton OIDC (court terme, signé par GitHub)
         ▼
-Workload Identity Federation ──► cloudrun-deployer@...iam.gserviceaccount.com
+Workload Identity Federation (modules/wif-pool, state landing-zone)
         │  credentials GCP temporaires (pas de clé JSON)
+        ▼
+cloudrun-deployer@...iam.gserviceaccount.com (modules/cloudrun-service, state projet-04-cloudrun)
         ▼
 ┌────────────────────────────┐      ┌──────────────────────────┐
 │ Artifact Registry              │ ───▶ │ Cloud Run : backend          │
 │ backend-repo (europe-west9)    │      │ scale-to-zero, public        │
 └────────────────────────────┘      └──────────────────────────┘
 ```
-
-### Les ressources
-
-| Ressource | Rôle |
-|---|---|
-| `google_project_service` | Active `run`, `artifactregistry`, `iamcredentials` sur le projet |
-| `google_artifact_registry_repository.backend` | Registre Docker privé `backend-repo` (europe-west9) |
-| `google_cloud_run_v2_service.backend` | Service serverless `backend` — créé avec une image placeholder, `lifecycle.ignore_changes` sur le conteneur (le pipeline CI/CD fait évoluer l'image ensuite) |
-| `google_cloud_run_v2_service_iam_member.public` | `roles/run.invoker` à `allUsers` (équivalent `--allow-unauthenticated`) |
-| `google_iam_workload_identity_pool.github` + `..._provider.github` | Pool/provider OIDC, restreint à `var.github_repo` via `attribute_condition` |
-| `google_service_account.cloudrun_deployer` | SA dédié au pipeline — `run.admin`, `artifactregistry.writer`, `iam.serviceAccountUser` (pas `terraform-runner`, pas `lab-vm`) |
-| `google_service_account_iam_member.github_wif_binding` | Autorise **ce repo GitHub précis** à emprunter l'identité du SA ci-dessus |
 
 ### Pourquoi pas une clé de service account JSON ?
 
@@ -555,9 +578,12 @@ des credentials GCP **temporaires** — aucun secret long terme à stocker.
 
 ### Récupérer les valeurs pour les secrets GitHub
 
+Depuis `projet-04-cloudrun/terraform/` (pas depuis `landing-zone/`) :
+
 ```bash
-terraform output cloudrun_workload_identity_provider     # → secret WIF_PROVIDER
-terraform output cloudrun_deployer_service_account_email # → secret WIF_SERVICE_ACCOUNT
+cd ../projet-04-cloudrun/terraform
+terraform output workload_identity_provider      # → secret WIF_PROVIDER
+terraform output deployer_service_account_email  # → secret WIF_SERVICE_ACCOUNT
 ```
 
 ### Coût
@@ -566,8 +592,9 @@ Cloud Run **scale à zéro** : aucune instance (donc aucun coût de calcul) tant
 qu'il n'y a aucun trafic. Seuls l'image stockée dans Artifact Registry
 (quelques Mo) et le service Cloud Run lui-même (gratuit à l'arrêt) persistent.
 
-> 📄 La suite — code de l'application, déploiement et tests — est documentée
-> dans [`../projet-04-cloudrun/README.md`](../projet-04-cloudrun/README.md).
+> 📄 Le détail des ressources Cloud Run, le code de l'application, le
+> déploiement et les tests sont documentés dans
+> [`../projet-04-cloudrun/README.md`](../projet-04-cloudrun/README.md).
 
 ---
 

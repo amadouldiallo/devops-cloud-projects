@@ -1,4 +1,4 @@
-# APIs nécessaires au Projet 04 (Cloud Run + CI/CD sans clé statique)
+# APIs nécessaires au service (Cloud Run + CI/CD sans clé statique)
 resource "google_project_service" "cloudrun_apis" {
   for_each = toset([
     "run.googleapis.com",
@@ -11,7 +11,7 @@ resource "google_project_service" "cloudrun_apis" {
   disable_on_destroy = false
 }
 
-# Registre d'images Docker pour le backend (Projet 04)
+# Registre d'images Docker pour le backend
 resource "google_artifact_registry_repository" "backend" {
   project       = var.project_id
   location      = var.region
@@ -23,8 +23,8 @@ resource "google_artifact_registry_repository" "backend" {
 }
 
 # Service Cloud Run — image placeholder au premier apply, remplacée par le
-# pipeline CI/CD (étape 6 du guide projet-04-cloudrun-ia.md). Terraform ne
-# suit pas l'image après coup : c'est le pipeline qui la fait évoluer.
+# pipeline CI/CD. Terraform ne suit pas l'image après coup : c'est le
+# pipeline qui la fait évoluer.
 resource "google_cloud_run_v2_service" "backend" {
   project  = var.project_id
   name     = var.service_name
@@ -37,7 +37,13 @@ resource "google_cloud_run_v2_service" "backend" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].containers]
+    # Le pipeline CI/CD (gcloud run deploy) gère l'image et les annotations
+    # client — Terraform ne doit pas les "reprendre".
+    ignore_changes = [
+      client,
+      client_version,
+      template[0].containers,
+    ]
   }
 
   depends_on = [google_project_service.cloudrun_apis]
@@ -51,35 +57,6 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 
   role   = "roles/run.invoker"
   member = "allUsers"
-}
-
-# --- Workload Identity Federation : GitHub Actions sans clé JSON ------------
-
-resource "google_iam_workload_identity_pool" "github" {
-  project                   = var.project_id
-  workload_identity_pool_id = "github-pool"
-  display_name              = "GitHub Actions"
-
-  depends_on = [google_project_service.cloudrun_apis]
-}
-
-resource "google_iam_workload_identity_pool_provider" "github" {
-  project                            = var.project_id
-  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
-  workload_identity_pool_provider_id = "github-provider"
-  display_name                       = "GitHub"
-
-  attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.repository" = "assertion.repository"
-  }
-  # Restreint l'échange de jeton à CE repo précis — sans ça, n'importe quel
-  # repo GitHub pourrait usurper l'identité du SA cloudrun-deployer.
-  attribute_condition = "assertion.repository == '${var.github_repo}'"
-
-  oidc {
-    issuer_uri = "https://token.actions.githubusercontent.com"
-  }
 }
 
 # SA dédié au déploiement depuis GitHub Actions — pas terraform-runner, pas lab-vm
@@ -98,9 +75,9 @@ resource "google_project_iam_member" "deployer_roles" {
   member  = "serviceAccount:${google_service_account.cloudrun_deployer.email}"
 }
 
-# Autorise CE repo GitHub précis à "devenir" le SA cloudrun-deployer
+# Autorise CE repo GitHub précis (via le pool WIF partagé) à "devenir" le SA cloudrun-deployer
 resource "google_service_account_iam_member" "github_wif_binding" {
   service_account_id = google_service_account.cloudrun_deployer.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+  member             = "principalSet://iam.googleapis.com/${var.workload_identity_pool_name}/attribute.repository/${var.github_repo}"
 }

@@ -14,6 +14,11 @@ variable "github_repo" {
   type        = string
 }
 
+variable "workload_identity_pool_name" {
+  description = "Nom complet du pool WIF partagé (output workload_identity_pool_name de la fondation landing-zone)"
+  type        = string
+}
+
 variable "service_name" {
   description = "Nom du service Cloud Run"
   type        = string

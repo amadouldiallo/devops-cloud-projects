@@ -5,9 +5,10 @@ et déployé en serverless sur **Cloud Run**, via un pipeline CI/CD GitHub
 Actions sans clé statique.
 
 > 🏗️ L'infrastructure GCP (Artifact Registry, service Cloud Run, identité de
-> déploiement) est provisionnée par Terraform — voir
-> [`../landing-zone/README.md` § 10](../landing-zone/README.md#10-le-module-cloudrun--cicd-cloud-run-sans-clé-statique-projet-04).
-> Ce document couvre uniquement le **code applicatif**.
+> déploiement) est provisionnée par Terraform dans
+> [`terraform/`](terraform/) — un **state indépendant** de la fondation, voir
+> [`../landing-zone/README.md` § 10](../landing-zone/README.md#10-fondation-vs-projets-le-pool-wif-partagé-et-le-state-de-projet-04).
+> Ce document couvre principalement le **code applicatif**.
 
 ---
 
@@ -18,7 +19,11 @@ projet-04-cloudrun/
 ├── app/
 │   └── main.py        # API FastAPI : /health + /chat
 ├── requirements.txt
-└── Dockerfile          # build multi-stage, utilisateur non-root
+├── Dockerfile          # build multi-stage, utilisateur non-root
+└── terraform/          # infra applicative — state Terraform indépendant
+    ├── backend.tf      # state : gs://devops-498817-tfstate/projet-04-cloudrun/state
+    ├── main.tf         # module cloudrun-service + lecture du pool WIF (fondation)
+    └── outputs.tf      # cloud_run_url, secrets WIF pour le pipeline CI/CD
 ```
 
 ---
@@ -73,6 +78,37 @@ curl http://localhost:8080/health
 
 ---
 
+## Provisionner l'infrastructure (Terraform)
+
+Le dossier [`terraform/`](terraform/) gère **uniquement** les ressources de
+ce projet (Artifact Registry, Cloud Run, SA `cloudrun-deployer`) — un state
+indépendant de la fondation (`landing-zone/`). Il lit le pool WIF partagé via
+`terraform_remote_state` (lecture seule, aucune écriture sur le state de la
+fondation).
+
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply
+```
+
+`terraform.tfvars` (gitignored) ne contient que `github_repo` :
+
+```hcl
+github_repo = "amadouldiallo/devops-cloud-projects"
+```
+
+Récupérer les valeurs des secrets GitHub Actions après le premier `apply` :
+
+```bash
+terraform output workload_identity_provider      # → secret WIF_PROVIDER
+terraform output deployer_service_account_email  # → secret WIF_SERVICE_ACCOUNT
+terraform output cloud_run_url
+```
+
+---
+
 ## Déployer sur Cloud Run
 
 ### Option 1 — déploiement manuel (vol d'essai)
@@ -94,9 +130,10 @@ push l'image vers Artifact Registry et redéploie Cloud Run à chaque
 L'authentification GCP se fait via **Workload Identity Federation** — pas de
 clé JSON stockée dans GitHub.
 
-Prérequis (une seule fois, après `terraform apply` du module `cloudrun`) :
-secrets de repo `WIF_PROVIDER` et `WIF_SERVICE_ACCOUNT` — voir
-[`../landing-zone/README.md` § 10](../landing-zone/README.md#10-le-module-cloudrun--cicd-cloud-run-sans-clé-statique-projet-04).
+Prérequis (une seule fois, après `terraform apply` dans
+[`terraform/`](terraform/), voir section suivante) : secrets de repo
+`WIF_PROVIDER` et `WIF_SERVICE_ACCOUNT` — voir
+[`../landing-zone/README.md` § 10](../landing-zone/README.md#10-fondation-vs-projets-le-pool-wif-partagé-et-le-state-de-projet-04).
 
 ---
 
