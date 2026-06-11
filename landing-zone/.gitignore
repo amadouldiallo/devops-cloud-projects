@@ -1,0 +1,9 @@
+# Variables locales (contiennent des identifiants spécifiques à l'utilisateur)
+terraform.tfvars
+*.auto.tfvars
+
+# Plans Terraform (peuvent contenir des données sensibles)
+*.tfplan
+
+# État local et caches Terraform
+.terraform/
