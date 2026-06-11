@@ -47,6 +47,9 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+Ouvre `http://localhost:8000/` dans un navigateur : un petit formulaire envoie
+le message à `/chat` et affiche la réponse du serveur.
+
 ```bash
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/chat -d "message=bonjour"
