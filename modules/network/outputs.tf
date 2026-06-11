@@ -8,6 +8,11 @@ output "vpc_name" {
   value       = google_compute_network.main.name
 }
 
+output "vpc_self_link" {
+  description = "Self-link du VPC créé (pour rattacher des ressources comme un cluster GKE)"
+  value       = google_compute_network.main.self_link
+}
+
 output "subnet_id" {
   description = "ID du sous-réseau créé"
   value       = google_compute_subnetwork.main.id

@@ -19,3 +19,12 @@ variable "subnet_cidr" {
   type        = string
   default     = "10.10.0.0/20"
 }
+
+variable "secondary_ip_ranges" {
+  description = "Ranges IP secondaires du sous-réseau (ex. pods/services pour un cluster GKE VPC-native) — optionnel"
+  type = list(object({
+    range_name    = string
+    ip_cidr_range = string
+  }))
+  default = []
+}
