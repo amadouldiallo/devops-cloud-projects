@@ -3,3 +3,11 @@ kind: Kustomization
 namespace: dev
 resources:
   - ../../base
+patches:
+  - target:
+      kind: Deployment
+      name: demo-app
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
