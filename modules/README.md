@@ -7,12 +7,13 @@ ont besoin via un chemin relatif.
 
 | Module | Rôle | Consommé par |
 |---|---|---|
-| [`network/`](network/) | VPC, sous-réseaux, routage, Cloud NAT | `landing-zone` |
+| [`network/`](network/) | VPC, sous-réseaux, routage, Cloud NAT, ranges secondaires (pods/services) | `landing-zone`, `projet-02-gitops/terraform` |
 | [`iam/`](iam/) | Bindings IAM (principe du moindre privilège) | `landing-zone` |
 | [`budget/`](budget/) | Alerte de facturation (FinOps as Code) | `landing-zone` |
 | [`compute/`](compute/) | VM de lab à la demande (lab-vm) | `landing-zone` |
 | [`wif-pool/`](wif-pool/) | Pool/provider Workload Identity Federation GitHub — un par projet (`pool_id` distinct) | `projet-04-cloudrun/terraform` |
 | [`cloudrun-service/`](cloudrun-service/) | Artifact Registry + Cloud Run + SA déployeur, pour une app donnée | `projet-04-cloudrun/terraform` |
+| [`gke-cluster/`](gke-cluster/) | Cluster GKE zonal VPC-native (alias IP) + node pool autoscalé + SA nœuds dédié | `projet-02-gitops/terraform` |
 
 ## Convention d'usage
 
